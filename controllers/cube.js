@@ -1,29 +1,31 @@
 const cubeModel = require('../models/cube')
 
-function index(req, res) {
+function index(req, res, next) {
     const { from, to, search } = req.query
-    const findFn = item => {
-        let result = true
-        if (search) {
-            result = item.name.toLowerCase().includes(search)
-        }
-        if (result && from) {
-            result = +item.difficultyLevel >= +from
-        }
-        if (result && to) {
-            result = +item.difficultyLevel <= +to
-        }
-        return result
+    let query = {}
+    if (search) {
+        query = { ...query, name: { $regex: search } }
     }
-
-    cubeModel.find(findFn).then((cubes) => {
-        res.render('index.hbs', { cubes })
-    })
+    if (to) {
+        query = {
+            ...query,
+            difficultyLevel: { $lte: +to }
+        }
+    }
+    if (from) {
+        query = {
+            ...query,
+            difficultyLevel: { ...query.difficultyLevel, $gte: +from }
+        }
+    }
+    cubeModel.find(query).then((cubes) => {
+        res.render('index.hbs', { cubes, search, from, to })
+    }).catch(next)
 
 }
 function details(req, res) {
-    const id = Number(req.params.id)
-    cubeModel.getOne(id).then((cube) => {
+    const id = req.params.id
+    cubeModel.findById(id).populate("accessories").then((cube) => {
         if (!cube) {
             res.redirect('/not-found')
             return
@@ -42,8 +44,7 @@ function about(req, res) {
 
 function postCreate(req, res) {
     const { name, description, imageUrl, difficultyLevel } = req.body
-    const newCube = cubeModel.create(name, description, imageUrl, difficultyLevel)
-    cubeModel.insert(newCube).then((inserted) => {
+    cubeModel.create({ name, description, imageUrl, difficultyLevel }).then((inserted) => {
         res.redirect('/')
     })
 }
